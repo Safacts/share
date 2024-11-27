@@ -145,35 +145,43 @@ class _ShareHomeState extends State<ShareHome> {
       addDebugLog("Server error: $e");
     }
   }
-void receiveFiles(Socket client) async {
-  addDebugLog("Client connected: ${client.remoteAddress.address}");
-  final buffer = BytesBuilder();
-  final startTime = DateTime.now(); // Track start time
+  void receiveFiles(Socket client) async {
+    addDebugLog("Client connected: ${client.remoteAddress.address}");
+    final buffer = BytesBuilder();
+    final startTime = DateTime.now(); // Track start time
 
-  client.listen((data) {
-    buffer.add(data);
-    setState(() {
-      final elapsedTime = DateTime.now().difference(startTime).inMilliseconds / 1000;
-      transferSpeed = "${(buffer.length / 1024 / 1024 / elapsedTime).toStringAsFixed(2)} MB/s";
+    client.listen((data) {
+      buffer.add(data);
+      setState(() {
+        final elapsedTime = DateTime.now().difference(startTime).inMilliseconds / 1000;
+        transferSpeed = "${(buffer.length / 1024 / 1024 / elapsedTime).toStringAsFixed(2)} MB/s";
+
+        // Calculate and display receiving percentage
+        if (buffer.length > 0) {
+          final totalSize = buffer.length;
+          final receivedPercentage = ((buffer.length / totalSize) * 100).toStringAsFixed(2);
+          addDebugLog("Receiving file: ${buffer.length} bytes received, ${receivedPercentage}% complete");
+        }
+      });
+    }, onDone: () async {
+      final fileData = buffer.toBytes();
+      final metaDataLength = fileData.indexOf(0); // Assuming metadata ends with 0 byte
+      final metaData = utf8.decode(fileData.sublist(0, metaDataLength));
+      final fileName = metaData.split("|")[0]; // Metadata format: "filename|filesize"
+      final fileSize = int.parse(metaData.split("|")[1]);
+      final file = File('$saveFolderPath/$fileName');
+
+      await file.writeAsBytes(fileData.sublist(metaDataLength + 1));
+      client.writeln("ACK"); // Send acknowledgment
+      client.destroy();
+
+      setState(() {
+        status = "File received: $fileName";
+      });
+
+      addDebugLog("File received: $fileName, total size: $fileSize bytes");
     });
-  }, onDone: () async {
-    final fileData = buffer.toBytes();
-    final metaDataLength = fileData.indexOf(0); // Assuming metadata ends with 0 byte
-    final metaData = utf8.decode(fileData.sublist(0, metaDataLength));
-    final fileName = metaData.split("|")[0]; // Metadata format: "filename|filesize"
-    final file = File('$saveFolderPath/$fileName');
-
-    await file.writeAsBytes(fileData.sublist(metaDataLength + 1));
-    client.writeln("ACK"); // Send acknowledgment
-    client.destroy();
-
-    setState(() {
-      status = "File received: $fileName";
-    });
-
-    addDebugLog("File received: $fileName");
-  });
-}
+  }
 
 
   Future<void> selectFilesAndSend() async {
