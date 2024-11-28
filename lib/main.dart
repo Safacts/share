@@ -17,11 +17,21 @@ class ShareApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'File Share',
-      theme: ThemeData(primarySwatch: Colors.blue),
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white, // Icons and text color
+        ),
+      ),
       home: const ShareHome(),
     );
   }
+
 }
+
+
+
 
 class ShareHome extends StatefulWidget {
   const ShareHome({super.key});
@@ -79,7 +89,7 @@ class _ShareHomeState extends State<ShareHome> {
       final localIp = interface.addresses.firstWhere((addr) => addr.type == InternetAddressType.IPv4).address;
 
       // Calculate broadcast address for the subnet
-      final broadcastAddress = localIp.substring(0, localIp.lastIndexOf('.') + 1) + '255';
+      final broadcastAddress = '${localIp.substring(0, localIp.lastIndexOf('.') + 1)}255';
 
       // Bind to the socket
       final udpSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 4445);
@@ -185,7 +195,7 @@ class _ShareHomeState extends State<ShareHome> {
         if (buffer.length > 0) {
           final totalSize = buffer.length;
           final receivedPercentage = ((buffer.length / totalSize) * 100).toStringAsFixed(2);
-          addDebugLog("Receiving file: ${buffer.length} bytes received, ${receivedPercentage}% complete");
+          addDebugLog("Receiving file: ${buffer.length} bytes received, $receivedPercentage% complete");
         }
       });
     }, onDone: () async {
@@ -265,7 +275,6 @@ class _ShareHomeState extends State<ShareHome> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -280,13 +289,26 @@ class _ShareHomeState extends State<ShareHome> {
           ),
         ),
         title: const Text("SHARE"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsPage()),
+              );
+            },
+          ),
+        ],
       ),
       body: Stack(
         children: [
+          // Main content
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
+                // Display current device name
                 Text("Device Name: $deviceName"),
                 const SizedBox(height: 10),
                 const Text("Available Devices:"),
@@ -312,6 +334,8 @@ class _ShareHomeState extends State<ShareHome> {
               ],
             ),
           ),
+
+          // Debug logs
           Positioned(
             bottom: 100,
             left: 16,
@@ -326,11 +350,16 @@ class _ShareHomeState extends State<ShareHome> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: debugLogs
                     .take(5)
-                    .map((log) => Text(log, style: const TextStyle(color: Colors.white, fontSize: 12)))
+                    .map((log) => Text(
+                          log,
+                          style: const TextStyle(color: Colors.white, fontSize: 12),
+                        ))
                     .toList(),
               ),
             ),
           ),
+
+          // Progress bar
           Positioned(
             bottom: 16,
             left: 16,
@@ -341,6 +370,8 @@ class _ShareHomeState extends State<ShareHome> {
               color: Colors.blue,
             ),
           ),
+
+          // Transfer speed
           Positioned(
             bottom: 50,
             left: 16,
@@ -350,8 +381,23 @@ class _ShareHomeState extends State<ShareHome> {
               style: const TextStyle(color: Colors.black, fontSize: 16),
             ),
           ),
-
         ],
+      ),
+    );
+  }
+}
+
+class SettingsPage extends StatelessWidget {
+  const SettingsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Settings"),
+      ),
+      body: const Center(
+        child: Text("Settings Page"),
       ),
     );
   }
