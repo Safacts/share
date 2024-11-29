@@ -295,7 +295,16 @@ class _ShareHomeState extends State<ShareHome> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const SettingsPage()),
+                MaterialPageRoute(
+                  builder: (context) => SettingsPage(
+                    initialDeviceName: deviceName,
+                    onDeviceNameUpdated: (newName) {
+                      setState(() {
+                        deviceName = newName;
+                      });
+                    },
+                  ),
+                ),
               );
             },
           ),
@@ -387,18 +396,70 @@ class _ShareHomeState extends State<ShareHome> {
   }
 }
 
-class SettingsPage extends StatelessWidget {
-  const SettingsPage({super.key});
+class SettingsPage extends StatefulWidget {
+  final String initialDeviceName;
+  final ValueChanged<String> onDeviceNameUpdated;
+
+  const SettingsPage({
+    required this.initialDeviceName,
+    required this.onDeviceNameUpdated,
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  _SettingsPageState createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  late TextEditingController _deviceNameController;
+
+  @override
+  void initState() {
+    super.initState();
+    _deviceNameController = TextEditingController(text: widget.initialDeviceName);
+  }
+
+  @override
+  void dispose() {
+    _deviceNameController.dispose();
+    super.dispose();
+  }
+
+  void _saveDeviceName() {
+    widget.onDeviceNameUpdated(_deviceNameController.text);
+    Navigator.pop(context); // Return to the main screen
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Settings"),
-      ),
-      body: const Center(
-        child: Text("Settings Page"),
+      appBar: AppBar(title: const Text("Settings")),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Device Name",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _deviceNameController,
+              decoration: const InputDecoration(
+                labelText: "Enter device name",
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _saveDeviceName,
+              child: const Text("Save"),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
+
