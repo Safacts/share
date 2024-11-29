@@ -31,6 +31,69 @@ class ShareApp extends StatelessWidget {
 
 }
 
+class NetworkManager {
+  final String deviceName;
+  final Function(String) logFunction;  // Function to log messages
+
+  NetworkManager(this.deviceName, this.logFunction);
+
+  
+
+  Future<void> sendBroadcast() async {
+    try {
+      final udpSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+      final interfaces = await NetworkInterface.list();
+      final interface = interfaces.firstWhere(
+        (iface) => iface.addresses.any((addr) => addr.type == InternetAddressType.IPv4),
+        orElse: () => throw Exception("No IPv4 interface found"),
+      );
+      final localIp = interface.addresses.firstWhere((addr) => addr.type == InternetAddressType.IPv4).address;
+
+      final broadcastAddress = "255.255.255.255";
+      udpSocket.broadcastEnabled = true;
+
+      udpSocket.send(
+        utf8.encode("$deviceName|$localIp"),
+        InternetAddress(broadcastAddress),
+        4445,
+      );
+
+      // Use the log function to log the message
+      logFunction("Broadcast sent: DeviceName=$deviceName, IP=$localIp to $broadcastAddress");
+    } catch (e) {
+      logFunction("Error sending broadcast: $e");
+    }
+  }
+
+  Future<void> listenForBroadcasts() async {
+    try {
+      final udpSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 4445);
+
+      udpSocket.listen((event) {
+        if (event == RawSocketEvent.read) {
+          final datagram = udpSocket.receive();
+          if (datagram != null) {
+            final senderIp = datagram.address.address;
+            final message = utf8.decode(datagram.data);
+
+            // Use the log function to log the message
+            logFunction("Received broadcast from $senderIp: $message");
+
+            final nameIp = message.split("|");
+            if (nameIp.length == 2) {
+              final name = nameIp[0];
+              final ip = nameIp[1];
+              // Process device info here...
+              logFunction("Discovered device: $name at $ip");
+            }
+          }
+        }
+      });
+    } catch (e) {
+      logFunction("Error listening for broadcasts: $e");
+    }
+  }
+}
 
 
 
@@ -61,8 +124,16 @@ class _ShareHomeState extends State<ShareHome> {
     super.initState();
     loadPreferences();
     initializeSaveFolder();
-    startDiscovery();
-    startServer();
+    final networkManager = NetworkManager(deviceName, addDebugLog);
+    networkManager.sendBroadcast();
+    networkManager.listenForBroadcasts();
+  }
+
+   void startDiscovery() {
+    // Create an instance of NetworkManager and pass addDebugLog as the log function
+    final networkManager = NetworkManager(deviceName, addDebugLog);
+    networkManager.sendBroadcast();
+    networkManager.listenForBroadcasts();
   }
 
   // Load saved preferences (device name and save folder)
@@ -141,81 +212,6 @@ class _ShareHomeState extends State<ShareHome> {
 
     addDebugLog("Save folder initialized at: $saveFolderPath");
   }
-
-
-  
-
-
-
-  Future<void> startDiscovery() async {
-    try {
-      // Get local IPv4 address
-      final interfaces = await NetworkInterface.list();
-      final interface = interfaces.firstWhere(
-        (iface) => iface.addresses.any((addr) => addr.type == InternetAddressType.IPv4),
-        orElse: () => throw Exception("No IPv4 interface found"),
-      );
-      final localIp = interface.addresses.firstWhere((addr) => addr.type == InternetAddressType.IPv4).address;
-
-      // Calculate broadcast address for the subnet
-      final broadcastAddress = '${localIp.substring(0, localIp.lastIndexOf('.') + 1)}255';
-
-      // Bind to the socket
-      final udpSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 4445);
-      udpSocket.broadcastEnabled = true;
-      addDebugLog("UDP socket bound to: ${udpSocket.address.address} on port 4445");
-
-      // Start periodic broadcasts
-    Timer.periodic(const Duration(seconds: 5), (_) {
-      try {
-        final message = "$deviceName|$localIp"; // Updated deviceName is used
-        udpSocket.send(
-          utf8.encode(message),
-          InternetAddress(broadcastAddress),
-          4445,
-        );
-        addDebugLog("Broadcast sent: $message to $broadcastAddress");
-      } catch (e) {
-        addDebugLog("Broadcast error: $e");
-      }
-    });
-
-
-      // Listen for incoming messages
-      udpSocket.listen((event) {
-        if (event == RawSocketEvent.read) {
-          final datagram = udpSocket.receive();
-          if (datagram != null) {
-            final senderIp = datagram.address.address;
-            final message = utf8.decode(datagram.data);
-
-            addDebugLog("Received broadcast from $senderIp: $message");
-
-            // Process message
-            final nameIp = message.split("|");
-            if (nameIp.length == 2) {
-              final name = nameIp[0];
-              final ip = nameIp[1];
-
-              // Ensure device is not already discovered and not itself
-              if (name != deviceName &&
-                  !discoveredDevices.any((device) => device['ip'] == ip)) {
-                setState(() {
-                  discoveredDevices.add({"name": name, "ip": ip});
-                });
-                addDebugLog("Discovered device: $name at $ip");
-              }
-            } else {
-              addDebugLog("Malformed message received: $message");
-            }
-          }
-        }
-      });
-    } catch (e) {
-      addDebugLog("Error in startDiscovery: $e");
-    }
-  }
-
 
 
 
