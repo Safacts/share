@@ -39,6 +39,8 @@ class ShareHome extends StatefulWidget {
 
   @override
   _ShareHomeState createState() => _ShareHomeState();
+
+  
 }
 
 class _ShareHomeState extends State<ShareHome> {
@@ -100,6 +102,16 @@ class _ShareHomeState extends State<ShareHome> {
   }
 
   Future<void> initializeSaveFolder() async {
+    // Request storage permissions for Android
+    if (Platform.isAndroid) {
+      final status = await Permission.storage.request();
+      if (!status.isGranted) {
+        addDebugLog("Storage permission not granted. Folder creation will fail.");
+        return;
+      }
+    }
+
+
     final prefs = await SharedPreferences.getInstance();
     final customSavePath = prefs.getString('saveFolderPath');
 
@@ -113,16 +125,26 @@ class _ShareHomeState extends State<ShareHome> {
       saveFolderPath = '${directory?.path}/ReceivedFiles';
     }
 
+    // Log the folder path before attempting creation
+    addDebugLog("Attempting to create folder at: $saveFolderPath");
+
     if (!Directory(saveFolderPath).existsSync()) {
       try {
         Directory(saveFolderPath).createSync(recursive: true);
+        addDebugLog("Folder successfully created at: $saveFolderPath");
       } catch (e) {
-        addDebugLog("Failed to create save folder: $e");
+        addDebugLog("Error creating folder at $saveFolderPath: $e");
       }
+    } else {
+      addDebugLog("Folder already exists at: $saveFolderPath");
     }
 
     addDebugLog("Save folder initialized at: $saveFolderPath");
   }
+
+
+  
+
 
 
   Future<void> startDiscovery() async {
@@ -200,8 +222,12 @@ class _ShareHomeState extends State<ShareHome> {
   Future<void> startServer() async {
     try {
       if (Platform.isAndroid) {
-        await Permission.storage.request();
+      final status = await Permission.storage.request();
+      if (!status.isGranted) {
+        addDebugLog("Storage permission not granted. Server initialization aborted.");
+        return;
       }
+    }
 
       if (!Directory(saveFolderPath).existsSync()) {
         Directory(saveFolderPath).createSync(recursive: true);
@@ -546,3 +572,65 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 }
+
+
+// class NetworkManager {
+//   final String deviceName;
+//   NetworkManager(this.deviceName);
+
+//   Future<void> sendBroadcast() async {
+//     try {
+//       final udpSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+//       final interfaces = await NetworkInterface.list();
+//       final interface = interfaces.firstWhere(
+//         (iface) => iface.addresses.any((addr) => addr.type == InternetAddressType.IPv4),
+//         orElse: () => throw Exception("No IPv4 interface found"),
+//       );
+//       final localIp = interface.addresses.firstWhere((addr) => addr.type == InternetAddressType.IPv4).address;
+
+//       final broadcastAddress = "255.255.255.255";
+//       udpSocket.broadcastEnabled = true;
+
+//       udpSocket.send(
+//         utf8.encode("$deviceName|$localIp"),
+//         InternetAddress(broadcastAddress),
+//         4445,
+//       );
+
+//       // Log debug message after broadcast
+//       addDebugLog(
+//           "Broadcast sent: DeviceName=$deviceName, IP=$localIp to $broadcastAddress");
+//     } catch (e) {
+//       addDebugLog("Error sending broadcast: $e");
+//     }
+//   }
+
+//   Future<void> listenForBroadcasts() async {
+//     try {
+//       final udpSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 4445);
+
+//       udpSocket.listen((event) {
+//         if (event == RawSocketEvent.read) {
+//           final datagram = udpSocket.receive();
+//           if (datagram != null) {
+//             final senderIp = datagram.address.address;
+//             final message = utf8.decode(datagram.data);
+
+//             // Log received message
+//             addDebugLog("Received broadcast from $senderIp: $message");
+
+//             final nameIp = message.split("|");
+//             if (nameIp.length == 2) {
+//               final name = nameIp[0];
+//               final ip = nameIp[1];
+//               // Process device info here...
+//               addDebugLog("Discovered device: $name at $ip");
+//             }
+//           }
+//         }
+//       });
+//     } catch (e) {
+//       addDebugLog("Error listening for broadcasts: $e");
+//     }
+//   }
+// }
