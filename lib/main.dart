@@ -80,6 +80,7 @@ class _ShareHomeState extends State<ShareHome> {
     setState(() {
       deviceName = newName;
     });
+    addDebugLog("Device name updated to: $deviceName");
   }
 
   // Update and save the file saving directory
@@ -89,6 +90,7 @@ class _ShareHomeState extends State<ShareHome> {
     setState(() {
       saveFolderPath = newPath;
     });
+    addDebugLog("Save folder path updated to: $saveFolderPath");
   }
 
   void addDebugLog(String message) {
@@ -98,16 +100,31 @@ class _ShareHomeState extends State<ShareHome> {
   }
 
   Future<void> initializeSaveFolder() async {
-    final directory = Platform.isAndroid
-        ? await getExternalStorageDirectory()
-        : Directory.current;
+    final prefs = await SharedPreferences.getInstance();
+    final customSavePath = prefs.getString('saveFolderPath');
 
-    setState(() {
+    if (customSavePath != null && customSavePath.isNotEmpty) {
+      saveFolderPath = customSavePath;
+    } else {
+      final directory = Platform.isAndroid
+          ? await getExternalStorageDirectory()
+          : Directory.current;
+
       saveFolderPath = '${directory?.path}/ReceivedFiles';
-    });
+    }
+
+    if (!Directory(saveFolderPath).existsSync()) {
+      try {
+        Directory(saveFolderPath).createSync(recursive: true);
+      } catch (e) {
+        addDebugLog("Failed to create save folder: $e");
+      }
+    }
 
     addDebugLog("Save folder initialized at: $saveFolderPath");
   }
+
+
   Future<void> startDiscovery() async {
     try {
       // Get local IPv4 address
@@ -127,19 +144,20 @@ class _ShareHomeState extends State<ShareHome> {
       addDebugLog("UDP socket bound to: ${udpSocket.address.address} on port 4445");
 
       // Start periodic broadcasts
-      Timer.periodic(const Duration(seconds: 5), (_) {
-        try {
-          final message = "$deviceName|$localIp";
-          udpSocket.send(
-            utf8.encode(message),
-            InternetAddress(broadcastAddress),
-            4445,
-          );
-          addDebugLog("Broadcast sent: $message to $broadcastAddress");
-        } catch (e) {
-          addDebugLog("Broadcast error: $e");
-        }
-      });
+    Timer.periodic(const Duration(seconds: 5), (_) {
+      try {
+        final message = "$deviceName|$localIp"; // Updated deviceName is used
+        udpSocket.send(
+          utf8.encode(message),
+          InternetAddress(broadcastAddress),
+          4445,
+        );
+        addDebugLog("Broadcast sent: $message to $broadcastAddress");
+      } catch (e) {
+        addDebugLog("Broadcast error: $e");
+      }
+    });
+
 
       // Listen for incoming messages
       udpSocket.listen((event) {
@@ -472,7 +490,9 @@ class _SettingsPageState extends State<SettingsPage> {
   void _saveSettings() {
     widget.onDeviceNameUpdated(_deviceNameController.text);
     Navigator.pop(context); // Return to the main screen
+
   }
+  
 
   @override
   Widget build(BuildContext context) {
