@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const ShareApp());
@@ -54,11 +55,40 @@ class _ShareHomeState extends State<ShareHome> {
   List<String> debugLogs = []; // To display debug messages
 
   @override
-  void initState() {
+   void initState() {
     super.initState();
+    loadPreferences();
     initializeSaveFolder();
     startDiscovery();
     startServer();
+  }
+
+  // Load saved preferences (device name and save folder)
+  Future<void> loadPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      deviceName = prefs.getString('deviceName') ?? deviceName;
+      saveFolderPath = prefs.getString('saveFolderPath') ?? saveFolderPath;
+    });
+  }
+
+
+  // Update and save the device name
+  Future<void> updateDeviceName(String newName) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('deviceName', newName);
+    setState(() {
+      deviceName = newName;
+    });
+  }
+
+  // Update and save the file saving directory
+  Future<void> updateSaveFolder(String newPath) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('saveFolderPath', newPath);
+    setState(() {
+      saveFolderPath = newPath;
+    });
   }
 
   void addDebugLog(String message) {
@@ -298,11 +328,9 @@ class _ShareHomeState extends State<ShareHome> {
                 MaterialPageRoute(
                   builder: (context) => SettingsPage(
                     initialDeviceName: deviceName,
-                    onDeviceNameUpdated: (newName) {
-                      setState(() {
-                        deviceName = newName;
-                      });
-                    },
+                    initialSaveFolder: saveFolderPath,
+                    onDeviceNameUpdated: updateDeviceName,
+                    onSaveFolderUpdated: updateSaveFolder,
                   ),
                 ),
               );
@@ -398,11 +426,15 @@ class _ShareHomeState extends State<ShareHome> {
 
 class SettingsPage extends StatefulWidget {
   final String initialDeviceName;
+  final String initialSaveFolder;
   final ValueChanged<String> onDeviceNameUpdated;
+  final ValueChanged<String> onSaveFolderUpdated;
 
   const SettingsPage({
     required this.initialDeviceName,
+    required this.initialSaveFolder,
     required this.onDeviceNameUpdated,
+    required this.onSaveFolderUpdated,
     Key? key,
   }) : super(key: key);
 
@@ -412,11 +444,13 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   late TextEditingController _deviceNameController;
+  late String _currentSaveFolder;
 
   @override
   void initState() {
     super.initState();
     _deviceNameController = TextEditingController(text: widget.initialDeviceName);
+    _currentSaveFolder = widget.initialSaveFolder;
   }
 
   @override
@@ -425,7 +459,17 @@ class _SettingsPageState extends State<SettingsPage> {
     super.dispose();
   }
 
-  void _saveDeviceName() {
+  void _updateSaveFolder() async {
+    final newFolder = await FilePicker.platform.getDirectoryPath();
+    if (newFolder != null) {
+      setState(() {
+        _currentSaveFolder = newFolder;
+      });
+      widget.onSaveFolderUpdated(newFolder);
+    }
+  }
+
+  void _saveSettings() {
     widget.onDeviceNameUpdated(_deviceNameController.text);
     Navigator.pop(context); // Return to the main screen
   }
@@ -452,8 +496,28 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
             const SizedBox(height: 20),
+            const Text(
+              "Save Folder",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _currentSaveFolder,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.folder_open),
+                  onPressed: _updateSaveFolder,
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: _saveDeviceName,
+              onPressed: _saveSettings,
               child: const Text("Save"),
             ),
           ],
@@ -462,4 +526,3 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 }
-
